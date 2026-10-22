@@ -1,0 +1,32 @@
+
+name: Qodana Community - Overly Complex Method
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  qodana:
+    name: Detect overly complex methods
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Qodana Community Scan
+        uses: JetBrains/qodana-action@v2026.2
+        with:
+          args: --profile-path .qodana/profiles/overly-complex-method.yaml --fail-threshold 0
+          upload-result: true
+          pr-mode: false
+          post-pr-comment: false
