@@ -7,4 +7,5 @@ linter: qodana-jvm-community
 #failThreshold: 0
 
 profile:
-  path: .qodana/profiles/overly-complex-method.yaml
+  path: .qodana/profiles/java-code-smells.yaml
+  
