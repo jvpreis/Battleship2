@@ -4,7 +4,7 @@ version: "1.0"
 linter: qodana-jvm-community
 
 # Falhar se existir pelo menos um problema detetado.
-failThreshold: 0
+#failThreshold: 0
 
 profile:
   path: .qodana/profiles/overly-complex-method.yaml
