@@ -1,0 +1,92 @@
+
+name: Qodana Community - Java Code Smells
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  qodana:
+    name: Detect Java code smells
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Qodana Community Scan
+        uses: JetBrains/qodana-action@v2026.2
+        with:
+          args: --profile-path .qodana/profiles/java-code-smells.yaml
+          upload-result: true
+          pr-mode: false
+          post-pr-comment: false
+
+      - name: Check code smell findings
+        if: always()
+        shell: bash
+        run: |
+          REPORT="${RUNNER_TEMP}/qodana/results/qodana.sarif.json"
+
+          if [ ! -f "$REPORT" ]; then
+            echo "::error::Qodana SARIF report was not generated."
+            exit 1
+          fi
+
+          python - "$REPORT" <<'PY'
+          import json
+          import sys
+
+          target_rules = {
+              "CyclomaticComplexity",
+              "ClassWithTooManyMethods",
+          }
+
+          with open(sys.argv[1], encoding="utf-8") as f:
+              sarif = json.load(f)
+
+          findings = [
+              (result, result.get("ruleId"))
+              for run in sarif.get("runs", [])
+              for result in run.get("results", [])
+              if result.get("ruleId") in target_rules
+          ]
+
+          if findings:
+              print(
+                  f"FAILED: Found {len(findings)} targeted "
+                  "code smell finding(s)."
+              )
+
+              for finding, rule_id in findings:
+                  message = finding.get("message", {}).get("text", "")
+                  locations = finding.get("locations", [])
+
+                  if locations:
+                      physical = locations[0].get(
+                          "physicalLocation", {}
+                      )
+                      artifact = physical.get(
+                          "artifactLocation", {}
+                      )
+                      uri = artifact.get("uri", "unknown file")
+                      line = physical.get("region", {}).get(
+                          "startLine", "?"
+                      )
+                      print(f"- [{rule_id}] {uri}:{line}: {message}")
+                  else:
+                      print(f"- [{rule_id}] {message}")
+
+              sys.exit(1)
+
+          print("PASSED: No targeted code smell findings.")
+          PY
