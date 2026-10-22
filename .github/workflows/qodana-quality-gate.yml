@@ -38,7 +38,9 @@ jobs:
           REPORT="${RUNNER_TEMP}/qodana/results/qodana.sarif.json"
 
           if [ ! -f "$REPORT" ]; then
-            echo "::error::Qodana SARIF report was not generated."
+            echo "::error::SARIF report not found at $REPORT"
+            echo "Searching for SARIF reports..."
+            find "$RUNNER_TEMP/qodana" -type f -name '*.sarif*' || true
             exit 1
           fi
 
@@ -46,45 +48,68 @@ jobs:
           import json
           import sys
 
-          target_rules = {
-              "CyclomaticComplexity",
-              "ClassWithTooManyMethods",
-          }
-
           with open(sys.argv[1], encoding="utf-8") as f:
               sarif = json.load(f)
 
-          findings = [
-              (result, result.get("ruleId"))
-              for run in sarif.get("runs", [])
-              for result in run.get("results", [])
-              if result.get("ruleId") in target_rules
-          ]
+          targets = {
+              "ClassWithTooManyMethods",
+              "MethodCount",
+              "CyclomaticComplexity",
+          }
+
+          findings = []
+
+          for run in sarif.get("runs", []):
+              rules = {
+                  rule.get("id"): rule
+                  for rule in run.get("tool", {})
+                               .get("driver", {})
+                               .get("rules", [])
+              }
+
+              print("Rule IDs reported by Qodana:")
+              for rule_id, rule in rules.items():
+                  name = rule.get("name", "")
+                  desc = rule.get("shortDescription", {}).get("text", "")
+                  print(f"  {rule_id}: {name} - {desc}")
+
+              for result in run.get("results", []):
+                  rule_id = result.get("ruleId", "")
+                  rule = rules.get(rule_id, {})
+                  name = rule.get("name", "")
+                  desc = rule.get("shortDescription", {}).get("text", "")
+
+                  text = f"{rule_id} {name} {desc}".lower()
+
+                  if (
+                      rule_id in targets
+                      or "class with too many methods" in text
+                  ):
+                      findings.append(result)
 
           if findings:
               print(
-                  f"FAILED: Found {len(findings)} targeted "
-                  "code smell finding(s)."
+                  f"FAILED: {len(findings)} class-with-too-many-methods "
+                  "finding(s) detected."
               )
 
-              for finding, rule_id in findings:
-                  message = finding.get("message", {}).get("text", "")
-                  locations = finding.get("locations", [])
+              for result in findings:
+                  message = result.get("message", {}).get("text", "")
+                  locations = result.get("locations", [])
 
                   if locations:
                       physical = locations[0].get(
                           "physicalLocation", {}
                       )
-                      artifact = physical.get(
+                      uri = physical.get(
                           "artifactLocation", {}
-                      )
-                      uri = artifact.get("uri", "unknown file")
+                      ).get("uri", "unknown file")
                       line = physical.get("region", {}).get(
                           "startLine", "?"
                       )
-                      print(f"- [{rule_id}] {uri}:{line}: {message}")
+                      print(f"- {uri}:{line}: {message}")
                   else:
-                      print(f"- [{rule_id}] {message}")
+                      print(f"- {message}")
 
               sys.exit(1)
 
