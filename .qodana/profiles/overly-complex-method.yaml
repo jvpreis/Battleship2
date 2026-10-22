@@ -1,0 +1,13 @@
+
+version: "1.0"
+
+profile:
+  base:
+    name: empty
+
+  inspections:
+    - inspection: CyclomaticComplexity
+      enabled: true
+      severity: WARNING
+      options:
+        m_limit: 3
